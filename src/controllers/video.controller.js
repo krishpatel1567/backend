@@ -109,7 +109,7 @@ const getVideoById = asyncHandler(async (req, res) => {
     const { videoId } = req.params
     //TODO: get video by id
     if (!isValidObjectId(videoId)) {
-        throw error
+        throw new ApiError(400, "Invalid video ID")
     }
 
     const video = await Video.findByIdAndUpdate(
@@ -119,12 +119,12 @@ const getVideoById = asyncHandler(async (req, res) => {
     ).populate("owner", "username email avatar");
 
     if (!video) {
-        throw error
+        throw new ApiError(404, "Video not found")
     }
     await User.findByIdAndUpdate(req.user._id, {
         $addToSet: { watchHistory: videoId }
     })
-    
+
     return res
         .status(200)
         .json(new ApiResponse(
@@ -172,7 +172,11 @@ const updateVideo = asyncHandler(async (req, res) => {
         updateData.thumbnail = newthumbnail.url
     }
 
-    const updatedVideo = await Video.findByIdAndUpdate(videoId, updateData, { new: true });
+    const updatedVideo = await Video.findByIdAndUpdate(
+        videoId,
+        { $set: updateData },
+        { new: true }
+    );
 
     return res
         .status(200)
@@ -198,15 +202,17 @@ const deleteVideo = asyncHandler(async (req, res) => {
         throw new ApiError(404, "video not found")
     }
 
-    if (video.owner.toString() !== req.user?._id) {
+    if (video.owner.toString() !== req.user?._id.toString()) {
         throw new ApiError(403, "you are not authorized to delete the video")
     }
 
     await Video.findByIdAndDelete(videoId)
 
-    return req
+    const deletedvideo = await deleteCloudinaryFile(video.videoFile)
+
+    return res
         .status(200)
-        .json(new ApiError(200, {}, "Video succesfully deleted"))
+        .json(new ApiResponse(200, {}, "Video succesfully deleted"))
 })
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
@@ -222,8 +228,8 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
         throw new ApiError(404, "video not found")
     }
 
-    if (video.owner.toString() !== req.user?._id) {
-        throw new ApiError(403, "you are not authorized to delete the video")
+    if (video.owner.toString() !== req.user?._id.toString()) {
+        throw new ApiError(403, "you are not authorized to toggle Publish status of the video")
     }
 
     video.isPublished = !video.isPublished

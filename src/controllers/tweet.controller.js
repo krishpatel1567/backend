@@ -8,26 +8,16 @@ import { asyncHandler } from "../utils/asyncHandler.js"
 const createTweet = asyncHandler(async (req, res) => {
     //TODO: create tweet
     const { content } = req.body
-    const owner = await User.findById(req.user?._id)
-
-    // writing the mains steps of every function 
-    // Step 1 (for create)  - Validate inputs
-    if (!owner) {
-        throw new ApiError(404, "Owner not found")
-    }
 
     if (!content || content.trim() === "") {
         throw new ApiError(400, "Content is required for a tweet")
     }
-
-    //step 2 - crate document 
 
     const newTweet = await Tweet.create({
         content,
         owner: req.user?._id
     })
 
-    //step 3 - return created document
 
     return res.status(201).json(
         new ApiResponse(201, newTweet, "Tweet created succesfully")
@@ -112,7 +102,7 @@ const deleteTweet = asyncHandler(async (req, res) => {
         throw new ApiError(400,"invalid tweet id")
     }
 
-    const tweet = Tweet.findById(tweetId)
+    const tweet = await Tweet.findById(tweetId)
 
     if (!tweet) {
         throw new ApiError(404,"Tweet not Found")

@@ -20,6 +20,8 @@ const createPlaylist = asyncHandler(async (req, res) => {
     })
 
     if (!playlist) throw new ApiError(500, "Failed to save playlist, try again");
+
+    return res.status(200).json(new ApiResponse(200,playlist,"Successfully created a Playlist"))
 })
 
 const getUserPlaylists = asyncHandler(async (req, res) => {
@@ -27,7 +29,7 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
     //TODO: get user playlists
     if (!isValidObjectId(userId)) throw new ApiError(400, "Invalid user ID")
 
-    const playlist = await Playlist.findOne({ owner: userId })
+    const playlist = await Playlist.find({ owner: userId })
 
     let message;
     if (!playlist) { message = "no playlist foung for the given user" } else { message = "successfully fetched the playlists" }
@@ -59,19 +61,21 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
 
     if (!isValidObjectId(playlistId)) throw new ApiError(400, "Invalid playlist ID")
     if (!isValidObjectId(videoId)) throw new ApiError(400, "Invalid video ID")
+    
+    if (playlistId.toString() !== req.user?._id.toString()) throw new ApiError(403,"You are not authorized to add video")
 
     const updatedPlaylist = await Playlist.findByIdAndUpdate(
         playlistId,
         {
-            $push: { videos: videoId }
+            $addToSet: { videos: videoId }
         }, { new: true }
     )
 
-    if (!updatePlaylist) throw new ApiError(500, "Something went wrong while adding playlist")
+    if (!updatedPlaylist) throw new ApiError(500, "Something went wrong while adding playlist")
 
     return res
         .status(200)
-        .json(new ApiResponse(200, updatePlaylist, "Video added to playlist successfully"))
+        .json(new ApiResponse(200, updatedPlaylist, "Video added to playlist successfully"))
 })
 
 const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
@@ -80,6 +84,8 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
 
     if (!isValidObjectId(playlistId)) throw new ApiError(400, "Invalid playlist ID")
     if (!isValidObjectId(videoId)) throw new ApiError(400, "Invalid video ID")
+    
+    if (playlistId.toString() !== req.user?._id.toString()) throw new ApiError(403,"You are not authorized to add video")
 
     const updatedPlaylist = await Playlist.findByIdAndUpdate(
         playlistId,
@@ -88,11 +94,11 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
         }, { new: true }
     )
 
-    if (!updatePlaylist) throw new ApiError(500, "Something went wrong while removing playlist")
+    if (!updatedPlaylist) throw new ApiError(500, "Something went wrong while removing playlist")
 
     return res
         .status(200)
-        .json(new ApiResponse(200, updatePlaylist, "Video removed to playlist successfully"))
+        .json(new ApiResponse(200, updatedPlaylist, "Video removed to playlist successfully"))
 
 })
 
@@ -109,15 +115,15 @@ const deletePlaylist = asyncHandler(async (req, res) => {
         throw new ApiError(404, "playlist not found")
     }
 
-    if (playlist.owner.toString() !== req.user?._id) {
+    if (playlist.owner.toString() !== req.user?._id.toString()) {
         throw new ApiError(403, "you are not authorized to delete the video")
     }
 
     await Playlist.findByIdAndDelete(playlistId)
 
-    return req
+    return res
         .status(200)
-        .json(new ApiError(200, {}, "Playlist succesfully deleted"))
+        .json(new ApiResponse(200, {}, "Playlist succesfully deleted"))
 
 })
 
@@ -126,19 +132,22 @@ const updatePlaylist = asyncHandler(async (req, res) => {
     const { name, description } = req.body
     //TODO: update playlist
     if (!isValidObjectId(playlistId)) throw new ApiError(400, "Invalid Playlist ID")
-
-    if (!name && !description) throw new ApiError(403, "Atleast one object need to update")
+    if (!name && !description) throw new ApiError(400, "At least one field needed to update")
 
     const oldPlaylist = await Playlist.findById(playlistId)
+    if (!oldPlaylist) throw new ApiError(404, "Playlist not found")
 
-    if (oldPlaylist.owner !== req.user?._id) throw new ApiError(403, "You are not authorized to update Playlist")
+    if (oldPlaylist.owner.toString() !== req.user?._id.toString()) throw new ApiError(403, "You are not authorized to update Playlist")
 
-    if (oldPlaylist.name.toString() !== name.toString()) { throw new ApiError(412, "Can't update with same name") } else { oldPlaylist.name = name }
-    if (oldPlaylist.description.toString() !== description.toString()) { throw new ApiError(412, "Can't update with same description") } else { oldPlaylist.description = description }
+    // Only update the fields that were actually sent
+    if (name) oldPlaylist.name = name.trim()
+    if (description) oldPlaylist.description = description.trim()
+
+    const updatedPlaylist = await oldPlaylist.save({ validateBeforeSave: false })
 
     return res
-    .status(200)
-    .json(new ApiResponse(200,{},"Successfully updated playlist"))
+        .status(200)
+        .json(new ApiResponse(200, updatedPlaylist, "Successfully updated playlist"))
 })
 
 export {
